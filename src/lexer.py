@@ -95,6 +95,7 @@ class TokenCategory(Enum):
     LET = "Let"
     IN = "In"
     NUMBER = "Number"
+    EQUALS = "Equals"
 
 
 @dataclass(frozen=True, slots=True)
@@ -150,6 +151,7 @@ ONE_CHARACTER_TOKENS = {
     "(": TokenCategory.LPAREN,
     ")": TokenCategory.RPAREN,
     ":": TokenCategory.COLON,
+    "=": TokenCategory.EQUALS,
 }
 
 
