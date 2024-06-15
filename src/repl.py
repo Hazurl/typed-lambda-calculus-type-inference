@@ -1,7 +1,8 @@
-from argparse import ArgumentParser
 import readline  # noqa: F401
-from lexer import lex, Source, Token, TokenCategory
-from parser import parse, print_expression, ExpectedTokenError
+from argparse import ArgumentParser
+
+from typed_lambda_calculus.lexer import Source, Token, TokenCategory, lex
+from typed_lambda_calculus.parser import ExpectedTokenError, parse, print_expression
 
 
 def get_source_from_input() -> Source:
