@@ -75,15 +75,26 @@ class TokenCategory(Enum):
     TYPE = "Type"
     LET = "Let"
     IN = "In"
-    LIT_NUMBER = "Number"
+    LITERAL = "Literal"
     EQUALS = "Equals"
     ARROW = "Arrow"
+
+
+class LiteralCategory(Enum):
+    BOOL = "Bool"
+    NUMBER = "Number"
 
 
 @dataclass(frozen=True, slots=True)
 class Token:
     position: SourcePosition
     category: TokenCategory
+    literal_category: LiteralCategory | None = None
+
+    def __post_init__(self):
+        assert (self.literal_category is not None) == (
+            self.category == TokenCategory.LITERAL
+        )
 
     @property
     def content(self) -> str:
@@ -117,14 +128,17 @@ class SourceReader:
         )
 
     def tokenize_while(
-        self, category: TokenCategory, predicate: Callable[[str], bool]
+        self,
+        predicate: Callable[[str], bool],
+        category: TokenCategory,
+        literal_category: LiteralCategory | None = None,
     ) -> Token:
         position = self.eat()
 
         while not self.current_position.eof() and predicate(self.peek()):
             position = position.grow()
             self.forward()
-        return Token(position, category)
+        return Token(position, category, literal_category)
 
 
 ONE_CHARACTER_TOKENS = {
@@ -152,12 +166,14 @@ def lex(source: Source) -> list[Token]:
         elif char in "0123456789":
             tokens.append(
                 reader.tokenize_while(
-                    TokenCategory.LIT_NUMBER, lambda c: c in "0123456789"
+                    lambda c: c in "0123456789",
+                    TokenCategory.LITERAL,
+                    LiteralCategory.NUMBER,
                 )
             )
 
         elif char.isalpha():
-            token = reader.tokenize_while(TokenCategory.VARIABLE, lambda c: c.isalpha())
+            token = reader.tokenize_while(lambda c: c.isalpha(), TokenCategory.VARIABLE)
             if token.content == "let":
                 token = Token(token.position, TokenCategory.LET)
 
@@ -166,6 +182,11 @@ def lex(source: Source) -> list[Token]:
 
             elif token.content[0].isupper():
                 token = Token(token.position, TokenCategory.TYPE)
+
+            elif token.content == "true" or token.content == "false":
+                token = Token(
+                    token.position, TokenCategory.LITERAL, LiteralCategory.BOOL
+                )
 
             tokens.append(token)
 

@@ -183,7 +183,7 @@ def parse_identifier(reader: TokenReader) -> Identifier:
 
 
 def parse_literal(reader: TokenReader) -> Literal:
-    identifier_token = reader.eat(TokenCategory.LIT_NUMBER)
+    identifier_token = reader.eat(TokenCategory.LITERAL)
     return Literal(identifier_token)
 
 
@@ -217,7 +217,7 @@ def try_parse_non_application_expression(reader: TokenReader) -> Expression | No
             return parse_parenthesized(reader, parse_expression)
         case TokenCategory.VARIABLE:
             return parse_identifier(reader)
-        case TokenCategory.LIT_NUMBER:
+        case TokenCategory.LITERAL:
             return parse_literal(reader)
         case TokenCategory.LET:
             return parse_let_in(reader)
@@ -234,7 +234,7 @@ def parse_expression(reader: TokenReader) -> Expression:
                 TokenCategory.LAMBDA,
                 TokenCategory.PAREN_LEFT,
                 TokenCategory.VARIABLE,
-                TokenCategory.LIT_NUMBER,
+                TokenCategory.LITERAL,
                 TokenCategory.LET,
             ],
             reader.peek(),

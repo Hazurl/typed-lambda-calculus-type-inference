@@ -101,5 +101,7 @@ if __name__ == "__main__":
                 print(position.full_line)
                 print(" " * position.column + "^" + "~" * (position.length - 1))
 
+            exit(1)
+
         if args.print_type:
             print(f"of type: {infer_type(expression)}")

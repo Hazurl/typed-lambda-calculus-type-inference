@@ -1,11 +1,21 @@
 from dataclasses import dataclass
 from .parser import Expression, Literal, Application, Lambda, Identifier
-from .lexer import Token, TokenCategory
+from .lexer import Token, TokenCategory, LiteralCategory
 
 
 @dataclass(frozen=True, slots=True)
 class KnownTyp:
     name: str
+
+    @classmethod
+    def from_literal_category(cls, literal_category: LiteralCategory) -> "KnownTyp":
+        match literal_category:
+            case LiteralCategory.NUMBER:
+                return cls("Number")
+            case LiteralCategory.BOOL:
+                return cls("Bool")
+            case _:
+                raise NotImplementedError()
 
 
 MONO_TYP_COUNTER = 0
@@ -60,9 +70,12 @@ def infer_type(
         typ_environement = EmptyTypEnvironment()
 
     match expression:
-        case Literal(Token(category=TokenCategory.LIT_NUMBER)):
-            print(f"{expression} : Number")
-            return KnownTyp("Number")
+        case Literal(
+            Token(category=TokenCategory.LITERAL, literal_category=literal_category)
+        ):
+            assert literal_category is not None
+            print(f"{expression} : {literal_category}")
+            return KnownTyp.from_literal_category(literal_category)
 
         case Identifier(token):
             typ_from_environement = typ_environement[token.content]
