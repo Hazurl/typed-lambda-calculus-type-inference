@@ -1,29 +1,9 @@
 from dataclasses import dataclass
 from enum import Enum
 from functools import cached_property
-from typing import Callable, ParamSpec, TypeVar
+from typing import Callable
 
 DEBUG_FUNCTION_INDENT = 0
-
-T = TypeVar("T")
-P = ParamSpec("P")
-
-
-def debug_function(func: Callable[P, T]) -> Callable[P, T]:
-    def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
-        global DEBUG_FUNCTION_INDENT
-        indent = "  " * DEBUG_FUNCTION_INDENT
-        DEBUG_FUNCTION_INDENT += 1
-        print(f"{indent}+ {func.__name__}({args}, {kwargs})")
-
-        result = func(*args, **kwargs)
-
-        print(f"{indent}- {func.__name__} -> {result}")
-        DEBUG_FUNCTION_INDENT -= 1
-
-        return result
-
-    return wrapper
 
 
 @dataclass(frozen=True, slots=True)
