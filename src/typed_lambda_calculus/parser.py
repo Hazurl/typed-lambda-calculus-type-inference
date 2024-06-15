@@ -1,11 +1,27 @@
 from dataclasses import dataclass
+from typing import Callable, TypeVar
 from .lexer import Token, TokenCategory
+
+
+@dataclass(frozen=True, slots=True)
+class TypFunction:
+    argument: "Typ"
+    arrow_token: Token
+    result: "Typ"
+
+
+@dataclass(frozen=True, slots=True)
+class TypVariable:
+    type_token: Token
+
+
+Typ = TypFunction | TypVariable
 
 
 @dataclass(frozen=True, slots=True)
 class TypeAnnotation:
     colon_token: Token
-    type_token: Token
+    typ: Typ
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,14 +107,52 @@ class TokenReader:
         return self.current_position >= len(self.tokens)
 
 
+def parse_non_function_typ(reader: TokenReader) -> Typ:
+    token = reader.peek()
+
+    match token.category if token else None:
+        case TokenCategory.TYPE:
+            return TypVariable(reader.eat(TokenCategory.TYPE))
+
+        case TokenCategory.PAREN_LEFT:
+            return parse_parenthesized(reader, parse_typ)
+
+        case _:
+            raise ExpectedTokenError(
+                [
+                    TokenCategory.TYPE,
+                    TokenCategory.PAREN_LEFT,
+                ],
+                token,
+            )
+
+
+def parse_typ(
+    reader: TokenReader,
+) -> Typ:
+    typ: Typ = parse_non_function_typ(reader)
+
+    token = reader.peek()
+    match token.category if token else None:
+        case TokenCategory.ARROW:
+            arrow_token = reader.eat(TokenCategory.ARROW)
+            next_typ = parse_typ(reader)
+            return TypFunction(typ, arrow_token, next_typ)
+
+        case _:
+            return typ
+
+
 def try_parse_type_annotation(reader: TokenReader) -> TypeAnnotation | None:
     colon_token = reader.peek()
     if colon_token is None or colon_token.category != TokenCategory.COLON:
         return None
 
     reader.forward()
-    type_token = reader.eat(TokenCategory.TYPE)
-    return TypeAnnotation(colon_token, type_token)
+
+    typ = parse_typ(reader)
+
+    return TypeAnnotation(colon_token, typ)
 
 
 def parse_lambda(reader: TokenReader) -> Lambda:
@@ -111,11 +165,16 @@ def parse_lambda(reader: TokenReader) -> Lambda:
     return Lambda(lambda_token, identifier_token, type_annotation, dot_token, body)
 
 
-def parse_parenthesized(reader: TokenReader) -> Expression:
+T = TypeVar("T")
+
+
+def parse_parenthesized(
+    reader: TokenReader, inner_parser: Callable[[TokenReader], T]
+) -> T:
     reader.eat(TokenCategory.PAREN_LEFT)
-    expression = parse_expression(reader)
+    parsed = inner_parser(reader)
     reader.eat(TokenCategory.PAREN_RIGHT)
-    return expression
+    return parsed
 
 
 def parse_identifier(reader: TokenReader) -> Identifier:
@@ -155,7 +214,7 @@ def try_parse_non_application_expression(reader: TokenReader) -> Expression | No
         case TokenCategory.LAMBDA:
             return parse_lambda(reader)
         case TokenCategory.PAREN_LEFT:
-            return parse_parenthesized(reader)
+            return parse_parenthesized(reader, parse_expression)
         case TokenCategory.VARIABLE:
             return parse_identifier(reader)
         case TokenCategory.LIT_NUMBER:
@@ -200,13 +259,26 @@ def parse(tokens: list[Token]) -> Expression:
 def print_expression(expression: Expression):
     indent = 0
 
+    def _typ_to_str(typ: Typ, use_parenthesis: bool = False) -> str:
+        match typ:
+            case TypVariable(type_token):
+                return type_token.content
+            case TypFunction(argument, _, result):
+                argument_str = _typ_to_str(argument, use_parenthesis=True)
+                result_str = _typ_to_str(result)
+                return (
+                    f"({_typ_to_str(argument)} -> {_typ_to_str(result)})"
+                    if use_parenthesis
+                    else f"{argument_str} -> {result_str}"
+                )
+
     def _print_expression(expression: Expression):
         nonlocal indent
 
         match expression:
             case LetIn(_, identifier_token, type_annotation, _, expression, _, body):
                 type_annotation_str = (
-                    f":{type_annotation.type_token.content}" if type_annotation else ""
+                    f":{_typ_to_str(type_annotation.typ)}" if type_annotation else ""
                 )
                 print(
                     " " * indent
@@ -219,7 +291,7 @@ def print_expression(expression: Expression):
                 indent -= 2
             case Lambda(_, identifier_token, type_annotation, _, body):
                 type_annotation_str = (
-                    f":{type_annotation.type_token.content}" if type_annotation else ""
+                    f":{_typ_to_str(type_annotation.typ)}" if type_annotation else ""
                 )
                 print(
                     " " * indent
