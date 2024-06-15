@@ -1,11 +1,18 @@
 from dataclasses import dataclass
-from lexer import Token, TokenCategory
+from .lexer import Token, TokenCategory
+
+
+@dataclass(frozen=True, slots=True)
+class TypeAnnotation:
+    colon_token: Token
+    type_token: Token
 
 
 @dataclass(frozen=True, slots=True)
 class LetIn:
     let_token: Token
     identifier_token: Token
+    type_annotation: TypeAnnotation | None
     equal_token: Token
     expression: "Expression"
     in_token: Token
@@ -16,6 +23,7 @@ class LetIn:
 class Lambda:
     lambda_token: Token
     identifier_token: Token
+    type_annotation: TypeAnnotation | None
     dot_token: Token
     body: "Expression"
 
@@ -83,13 +91,24 @@ class TokenReader:
         return self.current_position >= len(self.tokens)
 
 
+def try_parse_type_annotation(reader: TokenReader) -> TypeAnnotation | None:
+    colon_token = reader.peek()
+    if colon_token is None or colon_token.category != TokenCategory.COLON:
+        return None
+
+    reader.forward()
+    type_token = reader.eat(TokenCategory.IDENTIFIER)
+    return TypeAnnotation(colon_token, type_token)
+
+
 def parse_lambda(reader: TokenReader) -> Lambda:
     lambda_token = reader.eat(TokenCategory.LAMBDA)
     identifier_token = reader.eat(TokenCategory.IDENTIFIER)
+    type_annotation = try_parse_type_annotation(reader)
     dot_token = reader.eat(TokenCategory.DOT)
 
     body = parse_expression(reader)
-    return Lambda(lambda_token, identifier_token, dot_token, body)
+    return Lambda(lambda_token, identifier_token, type_annotation, dot_token, body)
 
 
 def parse_parenthesized(reader: TokenReader) -> Expression:
@@ -112,11 +131,21 @@ def parse_literal(reader: TokenReader) -> Literal:
 def parse_let_in(reader: TokenReader) -> LetIn:
     let_token = reader.eat(TokenCategory.LET)
     identifier_token = reader.eat(TokenCategory.IDENTIFIER)
+    type_annotation = try_parse_type_annotation(reader)
     equal_token = reader.eat(TokenCategory.EQUALS)
     expression = parse_expression(reader)
     in_token = reader.eat(TokenCategory.IN)
     body = parse_expression(reader)
-    return LetIn(let_token, identifier_token, equal_token, expression, in_token, body)
+
+    return LetIn(
+        let_token,
+        identifier_token,
+        type_annotation,
+        equal_token,
+        expression,
+        in_token,
+        body,
+    )
 
 
 def try_parse_non_application_expression(reader: TokenReader) -> Expression | None:
@@ -175,16 +204,27 @@ def print_expression(expression: Expression):
         nonlocal indent
 
         match expression:
-            case LetIn(_, identifier_token, _, expression, _, body):
-                print(" " * indent + "let")
+            case LetIn(_, identifier_token, type_annotation, _, expression, _, body):
+                type_annotation_str = (
+                    f":{type_annotation.type_token.content}" if type_annotation else ""
+                )
+                print(
+                    " " * indent
+                    + f"let [{identifier_token.content}{type_annotation_str}] ="
+                )
                 indent += 2
-                print(" " * indent + f"{identifier_token.content}:var =")
                 _print_expression(expression)
                 print(" " * indent + "in")
                 _print_expression(body)
                 indent -= 2
-            case Lambda(_, identifier_token, _, body):
-                print(" " * indent + "λ" + identifier_token.content + ":var .")
+            case Lambda(_, identifier_token, type_annotation, _, body):
+                type_annotation_str = (
+                    f":{type_annotation.type_token.content}" if type_annotation else ""
+                )
+                print(
+                    " " * indent
+                    + f"λ [{identifier_token.content}{type_annotation_str}] ."
+                )
                 indent += 2
                 _print_expression(body)
                 indent -= 2
@@ -195,8 +235,8 @@ def print_expression(expression: Expression):
                 _print_expression(argument)
                 indent -= 2
             case Identifier(identifier_token):
-                print(" " * indent + identifier_token.content + ":ident")
+                print(" " * indent + f"ident[{identifier_token.content}]")
             case Literal(literal_token):
-                print(" " * indent + literal_token.content + ":literal")
+                print(" " * indent + f"literal[{literal_token.content}]")
 
     _print_expression(expression)
