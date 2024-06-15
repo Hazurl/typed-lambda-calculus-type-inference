@@ -97,13 +97,13 @@ def try_parse_type_annotation(reader: TokenReader) -> TypeAnnotation | None:
         return None
 
     reader.forward()
-    type_token = reader.eat(TokenCategory.IDENTIFIER)
+    type_token = reader.eat(TokenCategory.TYPE)
     return TypeAnnotation(colon_token, type_token)
 
 
 def parse_lambda(reader: TokenReader) -> Lambda:
     lambda_token = reader.eat(TokenCategory.LAMBDA)
-    identifier_token = reader.eat(TokenCategory.IDENTIFIER)
+    identifier_token = reader.eat(TokenCategory.VARIABLE)
     type_annotation = try_parse_type_annotation(reader)
     dot_token = reader.eat(TokenCategory.DOT)
 
@@ -112,25 +112,25 @@ def parse_lambda(reader: TokenReader) -> Lambda:
 
 
 def parse_parenthesized(reader: TokenReader) -> Expression:
-    reader.eat(TokenCategory.LPAREN)
+    reader.eat(TokenCategory.PAREN_LEFT)
     expression = parse_expression(reader)
-    reader.eat(TokenCategory.RPAREN)
+    reader.eat(TokenCategory.PAREN_RIGHT)
     return expression
 
 
 def parse_identifier(reader: TokenReader) -> Identifier:
-    identifier_token = reader.eat(TokenCategory.IDENTIFIER)
+    identifier_token = reader.eat(TokenCategory.VARIABLE)
     return Identifier(identifier_token)
 
 
 def parse_literal(reader: TokenReader) -> Literal:
-    identifier_token = reader.eat(TokenCategory.NUMBER)
+    identifier_token = reader.eat(TokenCategory.LIT_NUMBER)
     return Literal(identifier_token)
 
 
 def parse_let_in(reader: TokenReader) -> LetIn:
     let_token = reader.eat(TokenCategory.LET)
-    identifier_token = reader.eat(TokenCategory.IDENTIFIER)
+    identifier_token = reader.eat(TokenCategory.VARIABLE)
     type_annotation = try_parse_type_annotation(reader)
     equal_token = reader.eat(TokenCategory.EQUALS)
     expression = parse_expression(reader)
@@ -154,11 +154,11 @@ def try_parse_non_application_expression(reader: TokenReader) -> Expression | No
     match token.category if token else None:
         case TokenCategory.LAMBDA:
             return parse_lambda(reader)
-        case TokenCategory.LPAREN:
+        case TokenCategory.PAREN_LEFT:
             return parse_parenthesized(reader)
-        case TokenCategory.IDENTIFIER:
+        case TokenCategory.VARIABLE:
             return parse_identifier(reader)
-        case TokenCategory.NUMBER:
+        case TokenCategory.LIT_NUMBER:
             return parse_literal(reader)
         case TokenCategory.LET:
             return parse_let_in(reader)
@@ -173,9 +173,9 @@ def parse_expression(reader: TokenReader) -> Expression:
         raise ExpectedTokenError(
             [
                 TokenCategory.LAMBDA,
-                TokenCategory.LPAREN,
-                TokenCategory.IDENTIFIER,
-                TokenCategory.NUMBER,
+                TokenCategory.PAREN_LEFT,
+                TokenCategory.VARIABLE,
+                TokenCategory.LIT_NUMBER,
                 TokenCategory.LET,
             ],
             reader.peek(),

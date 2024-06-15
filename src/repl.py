@@ -26,6 +26,7 @@ def get_source_from_input() -> Source:
             TokenCategory.IN,
             TokenCategory.DOT,
             TokenCategory.EQUALS,
+            TokenCategory.ARROW,
         }
 
     while expecting_more():
@@ -37,9 +38,13 @@ def get_source_from_input() -> Source:
         balanced_count = 0
         for token in tokens:
             match token.category:
-                case TokenCategory.LPAREN | TokenCategory.LET | TokenCategory.LAMBDA:
+                case (
+                    TokenCategory.PAREN_LEFT
+                    | TokenCategory.LET
+                    | TokenCategory.LAMBDA
+                ):
                     balanced_count += 1
-                case TokenCategory.RPAREN | TokenCategory.IN | TokenCategory.DOT:
+                case TokenCategory.PAREN_RIGHT | TokenCategory.IN | TokenCategory.DOT:
                     balanced_count -= 1
 
     return Source.from_string(content)

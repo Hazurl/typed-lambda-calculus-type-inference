@@ -68,14 +68,16 @@ class SourcePosition:
 class TokenCategory(Enum):
     LAMBDA = "Lambda"
     DOT = "Dot"
-    LPAREN = "L-Paren"
-    RPAREN = "R-Paren"
+    PAREN_RIGHT = "L-Paren"
+    PAREN_LEFT = "R-Paren"
     COLON = "Colon"
-    IDENTIFIER = "Identifier"
+    VARIABLE = "Variable"
+    TYPE = "Type"
     LET = "Let"
     IN = "In"
-    NUMBER = "Number"
+    LIT_NUMBER = "Number"
     EQUALS = "Equals"
+    ARROW = "Arrow"
 
 
 @dataclass(frozen=True, slots=True)
@@ -128,8 +130,8 @@ class SourceReader:
 ONE_CHARACTER_TOKENS = {
     "\\": TokenCategory.LAMBDA,
     ".": TokenCategory.DOT,
-    "(": TokenCategory.LPAREN,
-    ")": TokenCategory.RPAREN,
+    "(": TokenCategory.PAREN_RIGHT,
+    ")": TokenCategory.PAREN_LEFT,
     ":": TokenCategory.COLON,
     "=": TokenCategory.EQUALS,
 }
@@ -149,19 +151,30 @@ def lex(source: Source) -> list[Token]:
 
         elif char in "0123456789":
             tokens.append(
-                reader.tokenize_while(TokenCategory.NUMBER, lambda c: c in "0123456789")
+                reader.tokenize_while(
+                    TokenCategory.LIT_NUMBER, lambda c: c in "0123456789"
+                )
             )
 
         elif char.isalpha():
-            token = reader.tokenize_while(
-                TokenCategory.IDENTIFIER, lambda c: c.isalpha()
-            )
+            token = reader.tokenize_while(TokenCategory.VARIABLE, lambda c: c.isalpha())
             if token.content == "let":
                 token = Token(token.position, TokenCategory.LET)
 
             elif token.content == "in":
                 token = Token(token.position, TokenCategory.IN)
 
+            elif token.content[0].isupper():
+                token = Token(token.position, TokenCategory.TYPE)
+
             tokens.append(token)
+
+        elif (arrow_position := reader.current_position.grow()).content == "->":
+            tokens.append(Token(arrow_position, TokenCategory.ARROW))
+            reader.forward()
+            reader.forward()
+
+        else:
+            raise ValueError(f"Unknown character {char} at {reader.current_position}")
 
     return tokens
