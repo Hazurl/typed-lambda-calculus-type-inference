@@ -68,8 +68,8 @@ class SourcePosition:
 class TokenCategory(Enum):
     LAMBDA = "Lambda"
     DOT = "Dot"
-    PAREN_RIGHT = "L-Paren"
-    PAREN_LEFT = "R-Paren"
+    PAREN_RIGHT = "R-Paren"
+    PAREN_LEFT = "L-Paren"
     COLON = "Colon"
     VARIABLE = "Variable"
     TYPE = "Type"
@@ -130,8 +130,8 @@ class SourceReader:
 ONE_CHARACTER_TOKENS = {
     "\\": TokenCategory.LAMBDA,
     ".": TokenCategory.DOT,
-    "(": TokenCategory.PAREN_RIGHT,
-    ")": TokenCategory.PAREN_LEFT,
+    "(": TokenCategory.PAREN_LEFT,
+    ")": TokenCategory.PAREN_RIGHT,
     ":": TokenCategory.COLON,
     "=": TokenCategory.EQUALS,
 }
