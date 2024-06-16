@@ -2,8 +2,10 @@ import readline  # noqa: F401
 from argparse import ArgumentParser
 
 from typed_lambda_calculus.lexer import Source, Token, TokenCategory, lex
-from typed_lambda_calculus.parser import ExpectedTokenError, parse, print_expression
-from typed_lambda_calculus.type_checker import infer_type, typ_to_str
+from typed_lambda_calculus.parser import ExpectedTokenError, parse
+from typed_lambda_calculus.type_checker import infer_type
+from typed_lambda_calculus.print_ast import print_expression, typ_to_str
+from typed_lambda_calculus.typ import reset_mono_typ_counter
 
 
 def get_source_from_input() -> Source:
@@ -90,6 +92,7 @@ if __name__ == "__main__":
                 print(token)
 
         try:
+            reset_mono_typ_counter()
             expression = parse(tokens)
             if args.print_ast:
                 print_expression(expression)
@@ -103,5 +106,8 @@ if __name__ == "__main__":
 
             exit(1)
 
+        typ = infer_type(expression)
         if args.print_type:
-            print(f"of type: {typ_to_str(infer_type(expression))}")
+            print(f"of type: {typ_to_str(typ)}")
+        if args.print_ast:
+            print_expression(expression)

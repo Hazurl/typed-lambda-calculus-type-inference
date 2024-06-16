@@ -1,44 +1,7 @@
 from dataclasses import dataclass
-from .parser import Expression, Literal, Application, Lambda, Identifier
-from .lexer import Token, TokenCategory, LiteralCategory
-
-
-@dataclass(frozen=True, slots=True)
-class KnownTyp:
-    name: str
-
-    @classmethod
-    def from_literal_category(cls, literal_category: LiteralCategory) -> "KnownTyp":
-        match literal_category:
-            case LiteralCategory.NUMBER:
-                return cls("Number")
-            case LiteralCategory.BOOL:
-                return cls("Bool")
-            case _:
-                raise NotImplementedError()
-
-
-MONO_TYP_COUNTER = 0
-
-
-@dataclass(frozen=True, slots=True)
-class MonoTyp:
-    name: str
-
-    @classmethod
-    def create(cls) -> "MonoTyp":
-        global MONO_TYP_COUNTER
-        MONO_TYP_COUNTER += 1
-        return cls(f"t{MONO_TYP_COUNTER}")
-
-
-@dataclass(frozen=True, slots=True)
-class LambdaTyp:
-    variable_typ: "InferredTyp"
-    body_typ: "InferredTyp"
-
-
-InferredTyp = KnownTyp | LambdaTyp | MonoTyp
+from .ast import Expression, Literal, Application, Lambda, Identifier
+from .lexer import Token, TokenCategory
+from .typ import KnownTyp, MonoTyp, LambdaTyp, InferredTyp
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,28 +34,34 @@ def infer_type(
 
     match expression:
         case Literal(
-            Token(category=TokenCategory.LITERAL, literal_category=literal_category)
+            Token(category=TokenCategory.LITERAL, literal_category=literal_category),
+            inferred_typ,
         ):
             assert literal_category is not None
             print(f"{expression} : {literal_category}")
-            return KnownTyp.from_literal_category(literal_category)
 
-        case Identifier(token):
+            known_typ = KnownTyp.from_literal_category(literal_category)
+            union_typ = union(known_typ, inferred_typ)
+            return inferred_typ.upgrade(union_typ)
+
+        case Identifier(token, inferred_typ):
             typ_from_environement = typ_environement[token.content]
-            typ = typ_environement[token.content] or MonoTyp.create()
-            print(
-                f"{expression} : {typ} {'+' if typ_from_environement is None else '-'}"
-            )
-            return typ
+            if typ_from_environement is not None:
+                print(f"{expression} : {typ_from_environement}")
+                union_typ = union(typ_from_environement, inferred_typ)
+                return inferred_typ.upgrade(union_typ)
+            return inferred_typ
 
-        case Application(function, argument):
+        case Application(function, argument, inferred_typ):
             function_typ = infer_type(function, typ_environement)
             argument_typ = infer_type(argument, typ_environement)
+
             print(f"{expression} : {function_typ} $ {argument_typ}")
+            return inferred_typ.upgrade(
+                infer_application_type(function_typ, argument_typ)
+            )
 
-            return infer_application_type(function_typ, argument_typ)
-
-        case Lambda(_, _, _, _, body):
+        case Lambda(_, _, _, _, body, inferred_typ):
             lambda_typ_environment = LambdaTypEnvironment(
                 variable_name=expression.identifier_token.content,
                 variable_typ=MonoTyp.create(),
@@ -102,10 +71,12 @@ def infer_type(
             body_typ = infer_type(body, lambda_typ_environment)
             print(f"{expression} : {lambda_typ_environment.variable_typ} -> {body_typ}")
 
-            return LambdaTyp(
+            true_typ = LambdaTyp(
                 variable_typ=lambda_typ_environment.variable_typ,
                 body_typ=body_typ,
             )
+            union_typ = union(true_typ, inferred_typ)
+            return inferred_typ.upgrade(union_typ)
 
         case _:
             raise NotImplementedError()
@@ -115,47 +86,66 @@ def infer_application_type(
     function_typ: InferredTyp, argument_typ: InferredTyp
 ) -> InferredTyp:
     print(f"inferring {function_typ} $ {argument_typ}")
-    match function_typ:
+    function_true_typ = function_typ.tru_typ()
+    argument_true_typ = argument_typ.tru_typ()
+
+    match function_true_typ:
         case LambdaTyp(variable_typ, body_typ):
-            unified_type = unify(variable_typ, argument_typ)
-            print(f"-  unified_type: {unified_type}")
-            print(f"-  substitute: {variable_typ} to {unified_type} in {body_typ}")
-            typ = subsitute(variable_typ, unified_type, body_typ)
-            print(f"-  typ: {typ}")
-            return typ
+            union_typ = union(variable_typ, argument_true_typ)
+            variable_typ.upgrade(union_typ)
+            argument_typ.upgrade(union_typ)
+
+            print(f"-  union_typ: {union_typ}")
+            print(f"-  substitute: {variable_typ} to {union_typ} in {body_typ}")
+            body_typ_substitued = subsitute(variable_typ, union_typ, body_typ)
+            print(f"-  body_typ_substitued: {body_typ_substitued}")
+
+            return body_typ_substitued
 
         case MonoTyp(_):
-            print(f"-  ensure {function_typ} is not in {argument_typ}")
-            if is_in_typ(function_typ, argument_typ):
-                raise ValueError(
-                    f"Cannot apply {argument_typ} to {function_typ} (recursive application)"
-                )
+            print(f"-  ensure {function_typ} is not in {argument_true_typ}")
 
             new_typ = LambdaTyp(
-                variable_typ=argument_typ,
+                variable_typ=argument_true_typ,
                 body_typ=MonoTyp.create(),
             )
             print(f"-  new_typ: {new_typ}")
-            unified_type = unify(function_typ, new_typ)
-            print(f"-  unified_type: {unified_type}")
+            union_typ = union(function_true_typ, new_typ)
+            print(f"-  union_typ: {union_typ}")
 
-            return infer_application_type(unified_type, argument_typ)
+            function_typ.upgrade(union_typ)
+
+            return infer_application_type(union_typ, argument_true_typ)
 
         case _:
             raise ValueError(f"Expected a lambda type, got {function_typ}")
 
 
-def unify(typ1: InferredTyp, typ2: InferredTyp) -> InferredTyp:
-    match (typ1, typ2):
-        case (unfied_typ, MonoTyp(_)):
+def union(typ1: InferredTyp, typ2: InferredTyp) -> InferredTyp:
+    true_typ1 = typ1.tru_typ()
+    true_typ2 = typ2.tru_typ()
+
+    if equal(true_typ1, true_typ2):
+        return typ1
+
+    match (true_typ1, true_typ2):
+        case (unfied_typ, MonoTyp(m)):
+            assert not is_in_typ(MonoTyp(m), unfied_typ), "Cannot unify recursive types"
             return unfied_typ
-        case (MonoTyp(_), unfied_typ):
+        case (MonoTyp(m), unfied_typ):
+            assert not is_in_typ(MonoTyp(m), unfied_typ), "Cannot unify recursive types"
             return unfied_typ
 
         case (KnownTyp(name1), KnownTyp(name2)):
             if name1 == name2:
                 return typ1
             raise ValueError(f"Cannot unify known types {name1} with {name2}")
+
+        case (LambdaTyp(variable_typ1, body_typ1), LambdaTyp(variable_typ2, body_typ2)):
+            return LambdaTyp(
+                variable_typ=union(variable_typ1, variable_typ2),
+                body_typ=union(body_typ1, body_typ2),
+            )
 
         case _:
             raise ValueError(f"Cannot unify {typ1} with {typ2}")
@@ -182,18 +172,22 @@ def equal(typ1: InferredTyp, typ2: InferredTyp) -> bool:
 def subsitute(
     from_typ: InferredTyp, to_typ: InferredTyp, in_typ: InferredTyp
 ) -> InferredTyp:
-    if equal(from_typ, in_typ):
-        return to_typ
+    true_from_typ = from_typ.tru_typ()
+    true_to_typ = to_typ.tru_typ()
+    true_in_typ = in_typ.tru_typ()
 
-    match in_typ:
+    if equal(true_from_typ, true_in_typ):
+        return true_to_typ
+
+    match true_in_typ:
         case LambdaTyp(variable_typ, body_typ):
             return LambdaTyp(
-                variable_typ=subsitute(from_typ, to_typ, variable_typ),
-                body_typ=subsitute(from_typ, to_typ, body_typ),
+                variable_typ=subsitute(true_from_typ, true_to_typ, variable_typ),
+                body_typ=subsitute(true_from_typ, true_to_typ, body_typ),
             )
 
         case KnownTyp(_) | MonoTyp(_):
-            return in_typ
+            return true_in_typ
 
         case _:
             raise NotImplementedError()
@@ -210,23 +204,5 @@ def is_in_typ(monotyp: MonoTyp, typ: InferredTyp) -> bool:
         case KnownTyp(_):
             return False
 
-        case _:
-            raise NotImplementedError()
-
-
-def typ_to_str(typ: InferredTyp, use_parenthesis: bool = False) -> str:
-    match typ:
-        case KnownTyp(name):
-            return name
-        case MonoTyp(name):
-            return "'" + name
-        case LambdaTyp(variable_typ, body_typ):
-            variable_str = typ_to_str(variable_typ, use_parenthesis=True)
-            body_str = typ_to_str(body_typ)
-            return (
-                f"({variable_str} -> {body_str})"
-                if use_parenthesis
-                else f"{variable_str} -> {body_str}"
-            )
         case _:
             raise NotImplementedError()
