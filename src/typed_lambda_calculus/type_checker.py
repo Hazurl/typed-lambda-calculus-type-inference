@@ -88,22 +88,9 @@ def infer_type(
         case Application(function, argument):
             function_typ = infer_type(function, typ_environement)
             argument_typ = infer_type(argument, typ_environement)
-
             print(f"{expression} : {function_typ} $ {argument_typ}")
 
-            match function_typ:
-                case LambdaTyp(variable_typ, body_typ):
-                    unified_type = unify(variable_typ, argument_typ)
-                    print(f"-  unified_type: {unified_type}")
-                    print(
-                        f"-  substitute: {variable_typ} to {unified_type} in {body_typ}"
-                    )
-                    typ = subsitute(variable_typ, unified_type, body_typ)
-                    print(f"-  typ: {typ}")
-                    return typ
-
-                case _:
-                    raise ValueError(f"Expected a lambda type, got {function_typ}")
+            return infer_application_type(function_typ, argument_typ)
 
         case Lambda(_, _, _, _, body):
             lambda_typ_environment = LambdaTypEnvironment(
@@ -122,6 +109,40 @@ def infer_type(
 
         case _:
             raise NotImplementedError()
+
+
+def infer_application_type(
+    function_typ: InferredTyp, argument_typ: InferredTyp
+) -> InferredTyp:
+    print(f"inferring {function_typ} $ {argument_typ}")
+    match function_typ:
+        case LambdaTyp(variable_typ, body_typ):
+            unified_type = unify(variable_typ, argument_typ)
+            print(f"-  unified_type: {unified_type}")
+            print(f"-  substitute: {variable_typ} to {unified_type} in {body_typ}")
+            typ = subsitute(variable_typ, unified_type, body_typ)
+            print(f"-  typ: {typ}")
+            return typ
+
+        case MonoTyp(_):
+            print(f"-  ensure {function_typ} is not in {argument_typ}")
+            if is_in_typ(function_typ, argument_typ):
+                raise ValueError(
+                    f"Cannot apply {argument_typ} to {function_typ} (recursive application)"
+                )
+
+            new_typ = LambdaTyp(
+                variable_typ=argument_typ,
+                body_typ=MonoTyp.create(),
+            )
+            print(f"-  new_typ: {new_typ}")
+            unified_type = unify(function_typ, new_typ)
+            print(f"-  unified_type: {unified_type}")
+
+            return infer_application_type(unified_type, argument_typ)
+
+        case _:
+            raise ValueError(f"Expected a lambda type, got {function_typ}")
 
 
 def unify(typ1: InferredTyp, typ2: InferredTyp) -> InferredTyp:
@@ -174,5 +195,38 @@ def subsitute(
         case KnownTyp(_) | MonoTyp(_):
             return in_typ
 
+        case _:
+            raise NotImplementedError()
+
+
+def is_in_typ(monotyp: MonoTyp, typ: InferredTyp) -> bool:
+    match typ:
+        case MonoTyp(other_monotyp):
+            return monotyp.name == other_monotyp
+
+        case LambdaTyp(arg_typ, body_typ):
+            return is_in_typ(monotyp, body_typ) or is_in_typ(monotyp, arg_typ)
+
+        case KnownTyp(_):
+            return False
+
+        case _:
+            raise NotImplementedError()
+
+
+def typ_to_str(typ: InferredTyp, use_parenthesis: bool = False) -> str:
+    match typ:
+        case KnownTyp(name):
+            return name
+        case MonoTyp(name):
+            return "'" + name
+        case LambdaTyp(variable_typ, body_typ):
+            variable_str = typ_to_str(variable_typ, use_parenthesis=True)
+            body_str = typ_to_str(body_typ)
+            return (
+                f"({variable_str} -> {body_str})"
+                if use_parenthesis
+                else f"{variable_str} -> {body_str}"
+            )
         case _:
             raise NotImplementedError()

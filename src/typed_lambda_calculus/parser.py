@@ -267,7 +267,7 @@ def print_expression(expression: Expression):
                 argument_str = _typ_to_str(argument, use_parenthesis=True)
                 result_str = _typ_to_str(result)
                 return (
-                    f"({_typ_to_str(argument)} -> {_typ_to_str(result)})"
+                    f"({argument_str} -> {result_str})"
                     if use_parenthesis
                     else f"{argument_str} -> {result_str}"
                 )

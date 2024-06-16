@@ -3,7 +3,7 @@ from argparse import ArgumentParser
 
 from typed_lambda_calculus.lexer import Source, Token, TokenCategory, lex
 from typed_lambda_calculus.parser import ExpectedTokenError, parse, print_expression
-from typed_lambda_calculus.type_checker import infer_type
+from typed_lambda_calculus.type_checker import infer_type, typ_to_str
 
 
 def get_source_from_input() -> Source:
@@ -104,4 +104,4 @@ if __name__ == "__main__":
             exit(1)
 
         if args.print_type:
-            print(f"of type: {infer_type(expression)}")
+            print(f"of type: {typ_to_str(infer_type(expression))}")
